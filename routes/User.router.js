@@ -1,26 +1,20 @@
-const express=require('express')
-const userRouter=express.Router()
-const {loginUser,registerUser,updatePassword,updateUser,deleteUser,verifyOtp,sendOtp,addArea,getAllUsers,getSingleUser}=require('../controllers/Auth.controller')
+const express = require('express')
+const userRouter = express.Router()
+const { loginUser, registerUser, getAllUsersExceptAdmin, getSingleUser, updateUser, deleteUser, addAreaToUser } = require('../controllers/Auth.controller')
 
 
-//get methods
-userRouter.get('/users',getAllUsers)
-userRouter.get('/userById',getSingleUser)
-userRouter.get('/send-otp',sendOtp)
- userRouter.get('/verify-otp',verifyOtp)
+//get emthods 
+userRouter.get('/all-users', getAllUsersExceptAdmin)
+userRouter.get('/userById', getSingleUser)
+
 
 // //post methods 
-userRouter.post('/login',loginUser)
-userRouter.post('/new-user',registerUser)
-// app.post('/',addArea)
-
-
-// //put methods 
-userRouter.put('/update-password',updatePassword)
-// app.put('/',updateUser)
+userRouter.post('/login', loginUser)
+userRouter.post('/new-user', registerUser)
+userRouter.post('/update-user', updateUser)
+userRouter.post('/add-area', addAreaToUser)
 
 // //delete methods 
-userRouter.delete('/delete-user',deleteUser)
+userRouter.delete('/delete-user', deleteUser)
 
-
-module.exports=userRouter
+module.exports = userRouter
