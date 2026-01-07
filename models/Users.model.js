@@ -24,11 +24,11 @@ const Users = sequelize.define("Users", {
     type: DataTypes.STRING(15),
     allowNull: true
   },
-  linesHandle: {
-    type: DataTypes.JSONB,    
-    allowNull: false,
-    defaultValue: {}            
-  },
+linesHandle: {
+  type: DataTypes.ARRAY(DataTypes.STRING),
+  allowNull: false,
+  defaultValue: []
+},
   role: {
     type: DataTypes.STRING(10),
     allowNull: true,

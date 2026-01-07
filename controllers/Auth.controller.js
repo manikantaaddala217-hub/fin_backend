@@ -2,6 +2,7 @@ const Users = require("../models/Users.model");
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
 require("dotenv").config();
+const { Op } = require("sequelize");
 
 const loginUser = async (req, res) => {
     try {
@@ -75,7 +76,6 @@ const registerUser = async (req, res) => {
     }
 };
 
-const { Op } = require("sequelize");
 
 const getAllUsersExceptAdmin = async (req, res) => {
     try {
@@ -174,36 +174,51 @@ const deleteUser = async (req, res) => {
 };
 
 const addAreaToUser = async (req, res) => {
-    try {
-        const { areaName, id } = req.body;
+  try {
+    let { areaName } = req.body;
 
-        if (!id || !areaName) {
-            return res.status(400).json({ message: "User ID and Area Name are required" });
-        }
-
-        const user = await Users.findByPk(id);
-
-        if (!user) {
-            return res.status(404).json({ message: "User not found" });
-        }
-
-        // Update linesHandle
-        const updatedLinesHandle = { ...user.linesHandle };
-        updatedLinesHandle[areaName] = { area: true };
-
-        await user.update({
-            linesHandle: updatedLinesHandle
-        });
-
-        res.status(200).json({
-            message: `Area '${areaName}' added successfully`,
-            linesHandle: user.linesHandle
-        });
-    } catch (error) {
-        console.error("Error adding area:", error);
-        res.status(500).json({ message: "Internal server error" });
+    // ✅ Simple validation
+    if (!areaName) {
+      return res.status(400).json({ message: "Area Name is required" });
     }
+
+    // ✅ Trim spaces only
+    areaName = areaName.trim();
+
+    const usersAll = await Users.findAll({
+      where: { role: "Admin" }
+    });
+
+    if (!usersAll || usersAll.length === 0) {
+      return res.status(404).json({ message: "No Admin users found" });
+    }
+
+    for (const user of usersAll) {
+      const existingLinesHandle = Array.isArray(user.linesHandle)
+        ? user.linesHandle
+        : [];
+
+      if (existingLinesHandle.includes(areaName)) continue;
+
+      const updatedLinesHandle = [
+        ...existingLinesHandle,
+        areaName
+      ];
+
+      await user.update({ linesHandle: updatedLinesHandle });
+    }
+
+    res.status(200).json({
+      message: `Area '${areaName}' added successfully to all Admin users`
+    });
+
+  } catch (error) {
+    console.error("Error adding area:", error);
+    res.status(500).json({ message: "Internal server error" });
+  }
 };
+
+
 
 module.exports = {
     loginUser,

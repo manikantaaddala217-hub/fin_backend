@@ -9,16 +9,23 @@ const {
     saveTable,
     getTablesByLoanId,
     updateTableEntry,
+    getLoanSummary,
+    downloadExcel
 } = require('../controllers/Loan.controller');
 
 // POST /loan/create -> create a new loan
 LoanRouter.post('/loan/create', createLoan);
+// POST /loan/download -> download loan data as Excel
+LoanRouter.post('/loan/download', downloadExcel);
+
+//total collections
+LoanRouter.get("/loan/summary", getLoanSummary);
 
 // GET /loan/all -> get all loans
 LoanRouter.get('/loan/all', getAllLoans);
 
 // PUT /loan/update/:id -> update loan by ID
-LoanRouter.put('/loan/update/:id', updateLoanById);
+LoanRouter.put('/loan/update', updateLoanById);
 
 // DELETE /loan/delete -> delete loan by ID (Query Param)
 LoanRouter.delete('/loan/delete', deleteLoanById);

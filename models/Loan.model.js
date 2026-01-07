@@ -10,14 +10,14 @@ const LoanUser = sequelize.define(
       primaryKey: true,
     },
 
-    sNo: {
+    sno: {
       type: DataTypes.INTEGER,
       allowNull: false,
       defaultValue: 0,
     },
 
     section: {
-      type: DataTypes.ENUM("Monthly", "Weekly", "Daily", "Intrest"),
+      type: DataTypes.ENUM("Monthly", "Weekly", "Daily", "Interest"),
       allowNull: false,
     },
 
@@ -42,12 +42,12 @@ const LoanUser = sequelize.define(
       allowNull: false,
     },
 
-    phno: {
+    phoneNumber: {
       type: DataTypes.STRING(15),
       allowNull: false,
     },
 
-    alternativeno: {
+    alternativeNumber: {
       type: DataTypes.STRING(15),
       allowNull: true,
       defaultValue: null,
@@ -59,38 +59,41 @@ const LoanUser = sequelize.define(
       defaultValue: null,
     },
 
-    h_o_W_o: {
+    houseWifeOrSonOf: {
       type: DataTypes.STRING(30),
       allowNull: true,
       defaultValue: null,
     },
 
-    refername: {
+    referName: {
       type: DataTypes.STRING(30),
       allowNull: true,
       defaultValue: null,
     },
 
-    referno: {
+    referNumber: {
       type: DataTypes.STRING(15),
       allowNull: true,
       defaultValue: null,
     },
 
-    gamount: {
+    givenAmount: {
       type: DataTypes.INTEGER,
       allowNull: false,
     },
+
     paid: {
-      type: DataTypes.INTEGER,
-      allowNull: true,
-      defaultValue: 0
-    },
-    interestPercnt: {
       type: DataTypes.INTEGER,
       allowNull: true,
       defaultValue: 0,
     },
+
+    interestPercent: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+      defaultValue: 0,
+    },
+
     interest: {
       type: DataTypes.INTEGER,
       allowNull: true,
@@ -112,6 +115,7 @@ const LoanUser = sequelize.define(
       type: DataTypes.DATEONLY,
       allowNull: false,
     },
+
     additionalInfo: {
       type: DataTypes.STRING(255),
       allowNull: true,
@@ -141,7 +145,9 @@ const LoanUser = sequelize.define(
 //
 LoanUser.beforeCreate((loan) => {
 
-  // 🔹 Calculate Day from givenDate
+  /* =========================================
+     1️⃣ Calculate Day from givenDate
+  ========================================= */
   if (loan.givenDate) {
     const date = new Date(loan.givenDate);
     const days = [
@@ -156,19 +162,27 @@ LoanUser.beforeCreate((loan) => {
     loan.day = days[date.getDay()];
   }
 
-  // 🔹 Safe defaults
-  const principal = loan.gamount || 0;
-  const percent = loan.interestPercnt || 0;
+  /* =========================================
+     2️⃣ Safe numeric defaults
+  ========================================= */
+  const principal = Number(loan.givenAmount) || 0;
+  const percent = Number(loan.interestPercent) || 0;
 
   let interestAmount = 0;
 
-  // 🔹 Interest calculation
-  if (loan.section === "Intrest") {
-    interestAmount = Math.round(principal * (percent / 100));
+  /* =========================================
+     3️⃣ Interest calculation
+  ========================================= */
+  if (loan.section === "Interest") {
+    interestAmount = Math.round((principal * percent) / 100);
     loan.interest = interestAmount;
+  } else {
+    loan.interest = Number(loan.interest) || 0;
   }
 
-
+  /* =========================================
+     4️⃣ Total Amount
+  ========================================= */
   loan.tamount = principal + loan.interest;
 });
 
