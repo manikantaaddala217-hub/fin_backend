@@ -10,13 +10,13 @@ const {
     getTablesByLoanId,
     updateTableEntry,
     getLoanSummary,
-    downloadExcel
+    downloadReport
 } = require('../controllers/Loan.controller');
 
 // POST /loan/create -> create a new loan
 LoanRouter.post('/loan/create', createLoan);
 // POST /loan/download -> download loan data as Excel
-LoanRouter.post('/loan/download', downloadExcel);
+LoanRouter.post('/loan/download', downloadReport);
 
 //total collections
 LoanRouter.get("/loan/summary", getLoanSummary);

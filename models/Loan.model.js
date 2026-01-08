@@ -141,12 +141,11 @@ const LoanUser = sequelize.define(
 );
 
 //
-// 🔹 HOOKS
+// 🔹 COMMON CALCULATION FUNCTION
 //
-LoanUser.beforeCreate((loan) => {
-
+const calculateLoan = (loan) => {
   /* =========================================
-     1️⃣ Calculate Day from givenDate
+     1️⃣ Calculate Day
   ========================================= */
   if (loan.givenDate) {
     const date = new Date(loan.givenDate);
@@ -163,20 +162,21 @@ LoanUser.beforeCreate((loan) => {
   }
 
   /* =========================================
-     2️⃣ Safe numeric defaults
+     2️⃣ Safe numeric values
   ========================================= */
   const principal = Number(loan.givenAmount) || 0;
   const percent = Number(loan.interestPercent) || 0;
-
   let interestAmount = 0;
 
   /* =========================================
-     3️⃣ Interest calculation
+     3️⃣ Interest Logic
   ========================================= */
   if (loan.section === "Interest") {
+    // 🔥 Backend calculates interest
     interestAmount = Math.round((principal * percent) / 100);
     loan.interest = interestAmount;
   } else {
+    // ✅ Interest comes from frontend
     loan.interest = Number(loan.interest) || 0;
   }
 
@@ -184,6 +184,17 @@ LoanUser.beforeCreate((loan) => {
      4️⃣ Total Amount
   ========================================= */
   loan.tamount = principal + loan.interest;
-});
+};
+
+//
+// 🔹 HOOKS
+//
+LoanUser.beforeCreate(calculateLoan);
+
+// Optional but safe (covers both)
+// LoanUser.beforeSave(calculateLoan);
 
 module.exports = LoanUser;
+
+
+
