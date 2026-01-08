@@ -114,9 +114,9 @@ const deleteLoanById = async (req, res) => {
 // 🔹 Update Loan by ID
 const updateLoanById = async (req, res) => {
   try {
-    const updateData = req.body;
+    const { loanId, ...updateFields } = req.body;
 
-    if (!updateData.loanId) {
+    if (!loanId) {
       return res.status(400).json({
         success: false,
         message: "loanId is required",
@@ -125,7 +125,7 @@ const updateLoanById = async (req, res) => {
 
     // 🔹 Fetch existing loan
     const existingLoan = await LoanUser.findOne({
-      where: { loanId: updateData.loanId },
+      where: { loanId },
     });
 
     if (!existingLoan) {
@@ -135,45 +135,47 @@ const updateLoanById = async (req, res) => {
       });
     }
 
-    // 🔹 Map correct model fields
-    let {
-      givenAmount = existingLoan.givenAmount,
-      interestPercent = existingLoan.interestPercent || 0,
-      interest = existingLoan.interest || 0,
-      section = existingLoan.section,
-    } = updateData;
-
-    // 🔥 Interest calculation
-    if (section === "Interest") {
-      // Backend calculates interest
-      interest = Math.round((Number(givenAmount) * Number(interestPercent)) / 100);
-    }
-    // else → interest comes from frontend
-
-    // 🔹 Total amount
-    const tamount = Number(givenAmount) + Number(interest);
-
-    const finalUpdateData = {
-      ...updateData,
-      givenAmount,
-      interest,
-      tamount,
+    // Helper to safely convert to Number, falling back to existing value
+    const safeNum = (val, fallback) => {
+      if (val === undefined || val === null || val === "") return fallback;
+      const num = Number(val);
+      return isNaN(num) ? fallback : num;
     };
 
-    // 🔹 Update DB
-    const [updatedRows] = await LoanUser.update(finalUpdateData, {
-      where: { loanId: updateData.loanId },
-    });
+    // 🔹 Map correct model fields and ensure they are numbers
+    const section = updateFields.section || existingLoan.section;
+    const givenAmount = safeNum(updateFields.givenAmount, existingLoan.givenAmount);
+    const interestPercent = safeNum(updateFields.interestPercent, existingLoan.interestPercent || 0);
+    let interest = safeNum(updateFields.interest, existingLoan.interest || 0);
 
-    if (updatedRows === 0) {
-      return res.status(400).json({
-        success: false,
-        message: "Nothing updated",
-      });
+    // 🔥 Interest calculation for "Interest" section
+    if (section === "Interest") {
+      interest = Math.round((givenAmount * interestPercent) / 100);
     }
 
+    // 🔹 Total amount calculation
+    const tamount = givenAmount + interest;
+
+    const finalUpdateData = {
+      ...updateFields,
+      givenAmount,
+      interest,
+      interestPercent,
+      tamount,
+      section
+    };
+
+    // Ensure loanId is not in the update payload to avoid primary key update errors
+    delete finalUpdateData.loanId;
+
+    // 🔹 Update DB
+    await LoanUser.update(finalUpdateData, {
+      where: { loanId },
+    });
+
+    // 🔹 Fetch the updated data to return to client
     const updatedLoan = await LoanUser.findOne({
-      where: { loanId: updateData.loanId },
+      where: { loanId },
     });
 
     res.status(200).json({
@@ -182,6 +184,7 @@ const updateLoanById = async (req, res) => {
       data: updatedLoan,
     });
   } catch (error) {
+    console.error("Update Loan Error:", error);
     res.status(500).json({
       success: false,
       message: "Failed to update loan",
@@ -189,6 +192,8 @@ const updateLoanById = async (req, res) => {
     });
   }
 };
+
+
 
 
 // 🔹 Table CRUD Operations
@@ -366,30 +371,30 @@ const downloadReport = async (req, res) => {
       const workbook = new ExcelJS.Workbook();
       const sheet = workbook.addWorksheet("Customers");
       sheet.columns = [
-      { header: "S.No", key: "sno", width: 8 },
-      { header: "Loan ID", key: "loanId", width: 36 },
-      { header: "Section", key: "section", width: 12 },
-      { header: "Area", key: "area", width: 12 },
-      { header: "Day", key: "day", width: 12 },
-      { header: "Name", key: "name", width: 20 },
-      { header: "Address", key: "address", width: 25 },
-      { header: "Phone", key: "phoneNumber", width: 15 },
-      { header: "Alt Phone", key: "alternativeNumber", width: 15 },
-      { header: "Work", key: "work", width: 15 },
-      { header: "H/O / W/O", key: "houseWifeOrSonOf", width: 18 },
-      { header: "Refer Name", key: "referName", width: 18 },
-      { header: "Refer Number", key: "referNumber", width: 18 },
-      { header: "Given Amount", key: "givenAmount", width: 15 },
-      { header: "Paid", key: "paid", width: 12 },
-      { header: "Interest %", key: "interestPercent", width: 12 },
-      { header: "Interest", key: "interest", width: 12 },
-      { header: "Total Amount", key: "tamount", width: 15 },
-      { header: "Given Date", key: "givenDate", width: 15 },
-      { header: "Last Date", key: "lastDate", width: 15 },
-      { header: "Additional Info", key: "additionalInfo", width: 25 },
-      { header: "Verified By", key: "verifiedBy", width: 15 },
-      { header: "Verified No", key: "verifiedByNo", width: 15 },
-    ];
+        { header: "S.No", key: "sno", width: 8 },
+        { header: "Loan ID", key: "loanId", width: 36 },
+        { header: "Section", key: "section", width: 12 },
+        { header: "Area", key: "area", width: 12 },
+        { header: "Day", key: "day", width: 12 },
+        { header: "Name", key: "name", width: 20 },
+        { header: "Address", key: "address", width: 25 },
+        { header: "Phone", key: "phoneNumber", width: 15 },
+        { header: "Alt Phone", key: "alternativeNumber", width: 15 },
+        { header: "Work", key: "work", width: 15 },
+        { header: "H/O / W/O", key: "houseWifeOrSonOf", width: 18 },
+        { header: "Refer Name", key: "referName", width: 18 },
+        { header: "Refer Number", key: "referNumber", width: 18 },
+        { header: "Given Amount", key: "givenAmount", width: 15 },
+        { header: "Paid", key: "paid", width: 12 },
+        { header: "Interest %", key: "interestPercent", width: 12 },
+        { header: "Interest", key: "interest", width: 12 },
+        { header: "Total Amount", key: "tamount", width: 15 },
+        { header: "Given Date", key: "givenDate", width: 15 },
+        { header: "Last Date", key: "lastDate", width: 15 },
+        { header: "Additional Info", key: "additionalInfo", width: 25 },
+        { header: "Verified By", key: "verifiedBy", width: 15 },
+        { header: "Verified No", key: "verifiedByNo", width: 15 },
+      ];
 
       const where = {
         givenDate: { [Op.between]: [fromDate, toDate] },
