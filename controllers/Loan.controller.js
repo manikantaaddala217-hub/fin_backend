@@ -114,46 +114,69 @@ const deleteLoanById = async (req, res) => {
 // 🔹 Update Loan by ID
 const updateLoanById = async (req, res) => {
   try {
-    const { loanId, ...updateFields } = req.body;
+    const { loanId, sno, section, ...updateFields } = req.body;
 
-    if (!loanId) {
+    if (!loanId || sno === undefined || !section) {
       return res.status(400).json({
         success: false,
-        message: "loanId is required",
+        message: "loanId, sno, and section are required",
       });
     }
 
-    // 🔹 Fetch existing loan
-    const existingLoan = await LoanUser.findOne({
+    // 🔹 Find record with SAME loanId + sno + section
+    const exactMatch = await LoanUser.findOne({
       where: { loanId },
     });
 
-    if (!existingLoan) {
-      return res.status(404).json({
+    // 🔹 Check if sno already exists for same loanId but DIFFERENT section
+    const snoConflict = await LoanUser.findOne({
+      where: {
+        sno,
+        section
+      },
+    });
+
+    if (exactMatch.loanId !== snoConflict.loanId) {
+      return res.status(400).json({
         success: false,
-        message: "Loan not found",
+        message: "S.No already allocated for another section",
       });
     }
 
-    // Helper to safely convert to Number, falling back to existing value
+    if (!exactMatch) {
+      return res.status(404).json({
+        success: false,
+        message: "Loan record not found for given loanId, sno and section",
+      });
+    }
+
+    // Helper to safely convert numbers
     const safeNum = (val, fallback) => {
       if (val === undefined || val === null || val === "") return fallback;
       const num = Number(val);
       return isNaN(num) ? fallback : num;
     };
 
-    // 🔹 Map correct model fields and ensure they are numbers
-    const section = updateFields.section || existingLoan.section;
-    const givenAmount = safeNum(updateFields.givenAmount, existingLoan.givenAmount);
-    const interestPercent = safeNum(updateFields.interestPercent, existingLoan.interestPercent || 0);
-    let interest = safeNum(updateFields.interest, existingLoan.interest || 0);
+    const givenAmount = safeNum(
+      updateFields.givenAmount,
+      exactMatch.givenAmount
+    );
 
-    // 🔥 Interest calculation for "Interest" section
+    const interestPercent = safeNum(
+      updateFields.interestPercent,
+      exactMatch.interestPercent || 0
+    );
+
+    let interest = safeNum(
+      updateFields.interest,
+      exactMatch.interest || 0
+    );
+
+    // 🔥 Calculate interest only for Interest section
     if (section === "Interest") {
       interest = Math.round((givenAmount * interestPercent) / 100);
     }
 
-    // 🔹 Total amount calculation
     const tamount = givenAmount + interest;
 
     const finalUpdateData = {
@@ -162,20 +185,15 @@ const updateLoanById = async (req, res) => {
       interest,
       interestPercent,
       tamount,
-      section
     };
 
-    // Ensure loanId is not in the update payload to avoid primary key update errors
-    delete finalUpdateData.loanId;
-
-    // 🔹 Update DB
+    // 🔹 Update using loanId + sno + section
     await LoanUser.update(finalUpdateData, {
-      where: { loanId },
+      where: { loanId, sno, section },
     });
 
-    // 🔹 Fetch the updated data to return to client
     const updatedLoan = await LoanUser.findOne({
-      where: { loanId },
+      where: { loanId, sno, section },
     });
 
     res.status(200).json({
@@ -192,7 +210,6 @@ const updateLoanById = async (req, res) => {
     });
   }
 };
-
 
 
 
@@ -356,6 +373,7 @@ const getLoanSummary = async (req, res) => {
   }
 };
 
+
 const downloadReport = async (req, res) => {
   try {
     const { dataType, section, areas, day, fromDate, toDate } = req.body;
@@ -370,12 +388,13 @@ const downloadReport = async (req, res) => {
     if (dataType === "Customer Data") {
       const workbook = new ExcelJS.Workbook();
       const sheet = workbook.addWorksheet("Customers");
+
       sheet.columns = [
         { header: "S.No", key: "sno", width: 8 },
-        { header: "Loan ID", key: "loanId", width: 36 },
+        { header: "Loan ID", key: "loanId", width: 30 },
         { header: "Section", key: "section", width: 12 },
         { header: "Area", key: "area", width: 12 },
-        { header: "Day", key: "day", width: 12 },
+        { header: "Day", key: "day", width: 10 },
         { header: "Name", key: "name", width: 20 },
         { header: "Address", key: "address", width: 25 },
         { header: "Phone", key: "phoneNumber", width: 15 },
@@ -386,6 +405,7 @@ const downloadReport = async (req, res) => {
         { header: "Refer Number", key: "referNumber", width: 18 },
         { header: "Given Amount", key: "givenAmount", width: 15 },
         { header: "Paid", key: "paid", width: 12 },
+        { header: "Pending", key: "pending", width: 12 },
         { header: "Interest %", key: "interestPercent", width: 12 },
         { header: "Interest", key: "interest", width: 12 },
         { header: "Total Amount", key: "tamount", width: 15 },
@@ -399,14 +419,38 @@ const downloadReport = async (req, res) => {
       const where = {
         givenDate: { [Op.between]: [fromDate, toDate] },
       };
-
       if (section) where.section = section;
       if (areas?.length) where.area = { [Op.in]: areas };
       if (section === "Weekly" && day) where.day = day;
 
       const users = await LoanUser.findAll({ where });
 
-      users.forEach((u, i) => sheet.addRow({ sno: i + 1, ...u.toJSON() }));
+      let totalGiven = 0,
+        totalPaid = 0,
+        totalAmount = 0;
+
+      users.forEach((u) => {
+        const paid = Number(u.paid || 0);
+        const total = Number(u.tamount || 0);
+
+        totalGiven += Number(u.givenAmount || 0);
+        totalPaid += paid;
+        totalAmount += total;
+
+        sheet.addRow({
+          ...u.toJSON(),
+          pending: total - paid,
+        });
+      });
+
+      const totalRow = sheet.addRow({
+        name: "TOTAL",
+        givenAmount: totalGiven,
+        paid: totalPaid,
+        pending: totalAmount - totalPaid,
+        tamount: totalAmount,
+      });
+      totalRow.font = { bold: true };
 
       res.setHeader(
         "Content-Disposition",
@@ -424,39 +468,44 @@ const downloadReport = async (req, res) => {
       const sheet = workbook.addWorksheet("Collections");
 
       sheet.columns = [
-        { header: "Customer Name", key: "name", width: 20 },
-        { header: "Area", key: "area", width: 12 },
-        { header: "Section", key: "section", width: 12 },
-        { header: "Paid Amount", key: "amount", width: 15 },
-        { header: "Collection Date", key: "date", width: 15 },
+        { header: "S.No", key: "sno", width: 8 },
+        { header: "Name", key: "name", width: 20 },
+        { header: "Date", key: "date", width: 15 },
+        { header: "Amount", key: "amount", width: 15 },
       ];
 
-      const users = await LoanUser.findAll({
-        where: {
-          ...(section && { section }),
-          ...(areas?.length && { area: { [Op.in]: areas } }),
-          ...(section === "Weekly" && day && { day }),
-        },
+      const collections = await LoanTable.findAll({
+        where: { date: { [Op.between]: [fromDate, toDate] } },
+        order: [["date", "ASC"]],
       });
 
-      for (const user of users) {
-        const collections = await LoanTable.findAll({
-          where: {
-            loanId: user.loanId,
-            date: { [Op.between]: [fromDate, toDate] },
-          },
-        });
+      const loanIds = [...new Set(collections.map((c) => c.loanId))];
 
-        collections.forEach((c) => {
-          sheet.addRow({
-            name: user.name,
-            area: user.area,
-            section: user.section,
-            amount: c.amount,
-            date: c.date,
-          });
+      const users = await LoanUser.findAll({
+        where: { loanId: { [Op.in]: loanIds } },
+        attributes: ["loanId", "name", "sno"],
+      });
+
+      const userMap = {};
+      users.forEach((u) => (userMap[u.loanId] = u));
+
+      let totalAmount = 0;
+
+      collections.forEach((c) => {
+        totalAmount += Number(c.amount || 0);
+        sheet.addRow({
+          sno: userMap[c.loanId]?.sno,
+          name: userMap[c.loanId]?.name,
+          date: c.date,
+          amount: c.amount,
         });
-      }
+      });
+
+      const totalRow = sheet.addRow({
+        name: "TOTAL",
+        amount: totalAmount,
+      });
+      totalRow.font = { bold: true };
 
       res.setHeader(
         "Content-Disposition",
@@ -467,10 +516,11 @@ const downloadReport = async (req, res) => {
     }
 
     /* ======================================================
-       3️⃣ FULL DATA → PDF (USER → TABLE)
+       3️⃣ FULL DATA → PDF (ALL CUSTOMER FIELDS + COLLECTION TABLE)
     ====================================================== */
     if (dataType === "Full Data") {
-      const doc = new PDFDocument({ margin: 40 });
+      const doc = new PDFDocument({ margin: 30, size: "A4" });
+
       res.setHeader("Content-Type", "application/pdf");
       res.setHeader(
         "Content-Disposition",
@@ -479,43 +529,120 @@ const downloadReport = async (req, res) => {
 
       doc.pipe(res);
 
+      doc.fontSize(16).font("Helvetica-Bold")
+        .text("Full Customer Loan Report", { align: "center" });
+      doc.moveDown(1);
+
       const users = await LoanUser.findAll({
         where: {
+          givenDate: { [Op.between]: [fromDate, toDate] },
           ...(section && { section }),
           ...(areas?.length && { area: { [Op.in]: areas } }),
           ...(section === "Weekly" && day && { day }),
         },
+        order: [["givenDate", "ASC"]],
       });
 
-      for (const user of users) {
-        doc.fontSize(14).text(`Customer: ${user.name}`, { underline: true });
-        doc.fontSize(10).text(`
-Area: ${user.area}
-Phone: ${user.phoneNumber}
-Loan Amount: ${user.givenAmount}
-Interest: ${user.interest}
-Total: ${user.tamount}
-        `);
+      for (const u of users) {
+        const paid = Number(u.paid || 0);
+        const total = Number(u.tamount || 0);
+        const pending = total - paid;
+
+        /* -------- CUSTOMER DETAILS -------- */
+        doc.fontSize(12).font("Helvetica-Bold")
+          .text(`Customer : ${u.name} (S.No: ${u.sno})`);
+        doc.moveDown(0.3);
+
+        doc.fontSize(9).font("Helvetica");
+
+        const fields = [
+          ["Loan ID", u.loanId], ["Section", u.section],
+          ["Area", u.area], ["Day", u.day],
+          ["Address", u.address], ["Phone", u.phoneNumber],
+          ["Alt Phone", u.alternativeNumber], ["Work", u.work],
+          ["H/O / W/O", u.houseWifeOrSonOf],
+          ["Refer Name", u.referName],
+          ["Refer Number", u.referNumber],
+          ["Given Amount", u.givenAmount],
+          ["Paid", paid], ["Pending", pending],
+          ["Interest %", u.interestPercent],
+          ["Interest", u.interest],
+          ["Total Amount", total],
+          ["Given Date", u.givenDate],
+          ["Last Date", u.lastDate],
+          ["Additional Info", u.additionalInfo],
+          ["Verified By", u.verifiedBy],
+          ["Verified No", u.verifiedByNo],
+        ];
+
+        fields.forEach((f, i) => {
+          const x = i % 2 === 0 ? 40 : 300;
+          doc.text(`${f[0]} : ${f[1] || "-"}`, x);
+          if (i % 2 !== 0) doc.moveDown(0.2);
+        });
 
         doc.moveDown(0.5);
-        doc.text("Collections:", { bold: true });
+
+        /* -------- COLLECTION TABLE -------- */
+        doc.font("Helvetica-Bold").fontSize(10).text("Collections");
+
+        const tableTop = doc.y + 5;
+        const colX = [40, 120, 260];
+        const rowHeight = 18;
+
+        // Header
+        doc
+          .rect(colX[0], tableTop, 60, rowHeight).stroke()
+          .rect(colX[1], tableTop, 140, rowHeight).stroke()
+          .rect(colX[2], tableTop, 100, rowHeight).stroke();
+
+        doc.text("S.No", colX[0] + 5, tableTop + 5);
+        doc.text("Date", colX[1] + 5, tableTop + 5);
+        doc.text("Amount", colX[2] + 5, tableTop + 5);
+
+        let y = tableTop + rowHeight;
+        let sno = 1;
+        let totalCollected = 0;
 
         const collections = await LoanTable.findAll({
-          where: {
-            loanId: user.loanId,
-            date: { [Op.between]: [fromDate, toDate] },
-          },
+          where: { loanId: u.loanId },
+          order: [["date", "ASC"]],
         });
 
         if (!collections.length) {
-          doc.text("No collection records");
+          doc.text("No collection records", colX[0] + 5, y + 5);
+          y += rowHeight;
+        } else {
+          collections.forEach(c => {
+            totalCollected += Number(c.amount || 0);
+
+            doc
+              .rect(colX[0], y, 60, rowHeight).stroke()
+              .rect(colX[1], y, 140, rowHeight).stroke()
+              .rect(colX[2], y, 100, rowHeight).stroke();
+
+            doc.text(sno++, colX[0] + 5, y + 5);
+            doc.text(c.date, colX[1] + 5, y + 5);
+            doc.text(`₹${c.amount}`, colX[2] + 5, y + 5);
+
+            y += rowHeight;
+
+            // Page break safety
+            if (y > 750) {
+              doc.addPage();
+              y = 50;
+            }
+          });
         }
 
-        collections.forEach((c) => {
-          doc.text(`• ${c.date} → ₹${c.amount}`);
-        });
+        // Total Row
+        doc.font("Helvetica-Bold");
+        doc.text(`Total Collected : ₹${totalCollected}`, colX[2], y + 10);
 
-        doc.addPage();
+        // Divider between customers
+        doc.moveDown(2);
+        doc.moveTo(30, doc.y).lineTo(560, doc.y).stroke();
+        doc.moveDown(1);
       }
 
       doc.end();
