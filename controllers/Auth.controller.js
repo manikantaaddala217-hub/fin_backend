@@ -1,9 +1,10 @@
 const Users = require("../models/Users.model");
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
-require("dotenv").config();
 const { Op } = require("sequelize");
-const transporter = require("../utils/nodemailerTransporter");
+require("dotenv").config();
+const { Resend } = require("resend");
+const resend = new Resend("re_5zagYLyK_La8ao54BEosZxQrX8LTm98fW");
 const otpStore = {};
 
 const loginUser = async (req, res) => {
@@ -47,7 +48,7 @@ const loginUser = async (req, res) => {
 
 const registerUser = async (req, res) => {
   try {
-    const { username, password, name, phoneNo, role, linesHandle } = req.body;
+    const { username, password, name, phoneNo, role, linesHandle, email } = req.body;
 
     if (!username || !password || !name) {
       return res.status(400).json({ message: "Username, password, and name are required" });
@@ -67,6 +68,7 @@ const registerUser = async (req, res) => {
       phoneNo,
       role,
       linesHandle,
+      email,
     });
 
     res.status(201).json({
@@ -280,10 +282,7 @@ const sendOtpToUser = async (req, res) => {
     const { username } = req.query;
 
     if (!username) {
-      return res.status(400).json({
-        success: false,
-        message: "Username is required",
-      });
+      return res.status(400).json({ success: false, message: "Username required" });
     }
 
     // 🔹 Verify if user exists
@@ -304,16 +303,13 @@ const sendOtpToUser = async (req, res) => {
       expiresAt: Date.now() + 5 * 60 * 1000, // 5 minutes
     };
 
-    // 🔹 Mail options
-    const mailOptions = {
-      from: process.env.EMAIL_USER,
-      to: "harideveloper1236@gmail.com",
+    // 🔹 Send email using Resend
+    await resend.emails.send({
+      from: "OTP <onboarding@resend.dev>",
+      to: user.email,
       subject: "Your OTP Code",
-      text: `Your OTP is ${otp}. It is valid for 5 minutes.`,
-    };
-
-    // 🔹 Send email
-    await transporter.sendMail(mailOptions);
+      text: `Your OTP is ${otp}. Valid for 5 minutes.`,
+    });
 
     res.status(200).json({
       success: true,

@@ -1,5 +1,5 @@
 const { DataTypes } = require("sequelize");
-const sequelize =require('../DB_Connection/db.con')
+const sequelize = require('../DB_Connection/db.con')
 
 const Users = sequelize.define("Users", {
   id: {
@@ -10,6 +10,11 @@ const Users = sequelize.define("Users", {
   username: {
     type: DataTypes.STRING(25),
     allowNull: false,
+    unique: true
+  },
+  email: {
+    type: DataTypes.STRING(100),
+    allowNull: true,
     unique: true
   },
   password: {
@@ -24,11 +29,11 @@ const Users = sequelize.define("Users", {
     type: DataTypes.STRING(15),
     allowNull: true
   },
-linesHandle: {
-  type: DataTypes.ARRAY(DataTypes.STRING),
-  allowNull: false,
-  defaultValue: []
-},
+  linesHandle: {
+    type: DataTypes.ARRAY(DataTypes.STRING),
+    allowNull: false,
+    defaultValue: []
+  },
   role: {
     type: DataTypes.STRING(10),
     allowNull: true,

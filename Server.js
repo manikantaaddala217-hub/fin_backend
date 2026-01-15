@@ -1,4 +1,5 @@
 const express = require('express')
+require('dotenv').config()
 const cors = require('cors')
 const morgan = require('morgan')
 const helmet = require('helmet')
@@ -23,6 +24,7 @@ app.use('/', LoanRouter)
 app.use('/', CfRouter)
 app.use('/', BkpRouter)
 
-app.listen(5000, () => {
+const PORT = process.env.PORT || 5000;
+app.listen(PORT, () => {
     console.log('server started')
 })
