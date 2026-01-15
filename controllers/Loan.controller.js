@@ -341,9 +341,13 @@ const getLoanSummary = async (req, res, next) => {
 
 const formatDateDMY = (dateStr) => {
   if (!dateStr) return "";
-  if (typeof dateStr === "string" && dateStr.includes("-")) return dateStr;
   const d = new Date(dateStr);
-  if (isNaN(d)) return "";
+  if (isNaN(d.getTime())) {
+    // If it's already dd-mm-yyyy string, returning it is tricky if we don't know the format.
+    // But since the user wants dd-mm-yyyy, we'll try to ensure it.
+    if (typeof dateStr === "string" && /^\d{2}-\d{2}-\d{4}$/.test(dateStr)) return dateStr;
+    return dateStr;
+  }
   return `${String(d.getDate()).padStart(2, "0")}-${String(
     d.getMonth() + 1
   ).padStart(2, "0")}-${d.getFullYear()}`;
@@ -371,12 +375,12 @@ const downloadReport = async (req, res, next) => {
       const workbook = new ExcelJS.Workbook();
       const sheet = workbook.addWorksheet("Customers");
 
-      sheet.columns = [
+      const columns = [
         { header: "S.No", key: "sno", width: 8 },
         { header: "Loan ID", key: "loanId", width: 30 },
         { header: "Section", key: "section", width: 12 },
         { header: "Area", key: "area", width: 12 },
-        { header: "Day", key: "day", width: 10 },
+        { header: "Day", key: "day", width: 15 },
         { header: "Name", key: "name", width: 20 },
         { header: "Address", key: "address", width: 25 },
         { header: "Phone", key: "phoneNumber", width: 15 },
@@ -391,13 +395,14 @@ const downloadReport = async (req, res, next) => {
         { header: "Given Date", key: "givenDate", width: 15 },
         { header: "Last Date", key: "lastDate", width: 15 },
       ];
+      sheet.columns = columns;
 
       sheet.insertRow(1, [headerText]);
-      sheet.mergeCells(1, 1, 1, sheet.columns.length);
+      sheet.mergeCells(1, 1, 1, columns.length);
       sheet.getRow(1).font = { bold: true };
 
       sheet.addRow([]);
-      sheet.addRow(sheet.columns.map((c) => c.header));
+      sheet.addRow(columns.map((c) => c.header));
       sheet.getRow(3).font = { bold: true };
 
       const where = {};
@@ -410,17 +415,39 @@ const downloadReport = async (req, res, next) => {
         order: [["sno", "ASC"]],
       });
 
+      let totalGiven = 0, totalPaid = 0, totalPending = 0, totalInterest = 0, totalFinal = 0;
+
       users.forEach((u) => {
+        const principal = Number(u.givenAmount || 0);
         const paid = Number(u.paid || 0);
+        const interest = Number(u.interest || 0);
         const total = Number(u.tamount || 0);
+        const pending = total - paid;
+
+        totalGiven += principal;
+        totalPaid += paid;
+        totalPending += pending;
+        totalInterest += interest;
+        totalFinal += total;
 
         sheet.addRow({
           ...u.toJSON(),
-          pending: total - paid,
+          pending,
           givenDate: formatDateDMY(u.givenDate),
           lastDate: formatDateDMY(u.lastDate),
         });
       });
+
+      // Add Total Row
+      const totalRow = sheet.addRow({
+        houseWifeOrSonOf: "TOTAL",
+        givenAmount: totalGiven,
+        paid: totalPaid,
+        pending: totalPending,
+        interest: totalInterest,
+        tamount: totalFinal
+      });
+      totalRow.font = { bold: true };
 
       res.setHeader(
         "Content-Disposition",
@@ -464,14 +491,24 @@ const downloadReport = async (req, res, next) => {
       const userMap = {};
       users.forEach((u) => (userMap[u.loanId] = u));
 
+      let totalCollection = 0;
       collections.forEach((c) => {
+        const amt = Number(c.amount || 0);
+        totalCollection += amt;
         sheet.addRow({
           sno: userMap[c.loanId]?.sno,
           name: userMap[c.loanId]?.name,
           date: formatDateDMY(c.date),
-          amount: c.amount,
+          amount: amt,
         });
       });
+
+      // Add Total Row
+      const totalRow = sheet.addRow({
+        date: "TOTAL",
+        amount: totalCollection
+      });
+      totalRow.font = { bold: true };
 
       res.setHeader(
         "Content-Disposition",
@@ -485,7 +522,7 @@ const downloadReport = async (req, res, next) => {
        3️⃣ FULL DATA → PDF
     ====================================================== */
     if (dataType === "Full Data") {
-      const doc = new PDFDocument({ margin: 30 });
+      const doc = new PDFDocument({ margin: 40 });
       res.setHeader("Content-Type", "application/pdf");
       res.setHeader(
         "Content-Disposition",
@@ -494,39 +531,96 @@ const downloadReport = async (req, res, next) => {
 
       doc.pipe(res);
 
-      doc.fontSize(14).font("Helvetica-Bold").text(headerText, {
-        align: "center",
-      });
+      // Header
+      doc.fontSize(16).font("Helvetica-Bold").text("Full Customer Loan Report", { align: "center" });
+      doc.fontSize(10).font("Helvetica").text(headerText, { align: "center" });
       doc.moveDown(2);
 
       const users = await LoanUser.findAll({ order: [["sno", "ASC"]] });
 
       for (const u of users) {
-        doc.fontSize(11).font("Helvetica-Bold").text(
-          `${u.name} (S.No: ${u.sno})`
-        );
-        doc.fontSize(9).font("Helvetica");
-
-        doc.text(`Loan ID: ${u.loanId}`);
-        doc.text(`Section: ${u.section} | Area: ${u.area}`);
-        doc.text(`Given Date: ${formatDateDMY(u.givenDate)} | Last Date: ${formatDateDMY(u.lastDate)}`);
-        doc.text(`Given: ${u.givenAmount} | Paid: ${u.paid} | Total: ${u.tamount}`);
+        // --- Customer Header Section ---
+        doc.rect(doc.x, doc.y, 515, 20).fill("#f2f2f2");
+        doc.fillColor("#000").font("Helvetica-Bold").fontSize(11).text(`Customer: ${u.name} (S.No: ${u.sno})`, 45, doc.y - 15);
         doc.moveDown(1);
+
+        const startY = doc.y;
+        doc.font("Helvetica").fontSize(9);
+
+        // Column 1
+        doc.text(`Loan ID: ${u.loanId}`, 45, startY);
+        doc.text(`Area: ${u.area}`, 45, doc.y + 2);
+        doc.text(`Address: ${u.address}`, 45, doc.y + 2);
+        doc.text(`Alt Phone: ${u.alternativeNumber || "N/A"}`, 45, doc.y + 2);
+        doc.text(`H/O / W/O: ${u.houseWifeOrSonOf || "N/A"}`, 45, doc.y + 2);
+        doc.text(`Refer Number: ${u.referNumber || "N/A"}`, 45, doc.y + 2);
+        doc.text(`Paid: ₹${u.paid}`, 45, doc.y + 2);
+        doc.text(`Interest %: ${u.interestPercent || 0}%`, 45, doc.y + 2);
+        doc.text(`Total Amount: ₹${u.tamount}`, 45, doc.y + 2);
+        doc.text(`Last Date: ${formatDateDMY(u.lastDate)}`, 45, doc.y + 2);
+        doc.text(`Verified By: ${u.verifiedBy || "N/A"}`, 45, doc.y + 2);
+
+        // Column 2
+        const col2X = 300;
+        doc.text(`Section: ${u.section}`, col2X, startY);
+        doc.text(`Day: ${u.day || "N/A"}`, col2X, doc.y + 2);
+        doc.text(`Phone: ${u.phoneNumber}`, col2X, doc.y + 2);
+        doc.text(`Work: ${u.work || "N/A"}`, col2X, doc.y + 2);
+        doc.text(`Refer Name: ${u.referName || "N/A"}`, col2X, doc.y + 2);
+        doc.text(`Given Amount: ₹${u.givenAmount}`, col2X, doc.y + 2);
+        doc.text(`Pending: ₹${(Number(u.tamount) || 0) - (Number(u.paid) || 0)}`, col2X, doc.y + 2);
+        doc.text(`Interest: ₹${u.interest || 0}`, col2X, doc.y + 2);
+        doc.text(`Given Date: ${formatDateDMY(u.givenDate)}`, col2X, doc.y + 2);
+        doc.text(`Additional Info: ${u.additionalInfo || "N/A"}`, col2X, doc.y + 2);
+        doc.text(`Verified No: ${u.verifiedByNo || "N/A"}`, col2X, doc.y + 2);
+
+        doc.moveDown(2);
+
+        // --- Collections Table ---
+        doc.font("Helvetica-Bold").text("Collections History", 45);
+        doc.moveDown(0.5);
+
+        // Table Header
+        const tableTop = doc.y;
+        doc.rect(45, tableTop, 515, 15).fill("#eeeeee");
+        doc.fillColor("#000").fontSize(9);
+        doc.text("S.No", 50, tableTop + 3);
+        doc.text("Date", 150, tableTop + 3);
+        doc.text("Amount", 350, tableTop + 3);
 
         const collections = await LoanTable.findAll({
           where: { loanId: u.loanId },
           order: [["date", "ASC"]],
         });
 
-        collections.forEach((c, i) => {
-          doc.text(
-            `${i + 1}. ${formatDateDMY(c.date)} - ₹${c.amount}`
-          );
+        let currentY = tableTop + 15;
+        let totalColl = 0;
+        collections.forEach((c, idx) => {
+          totalColl += Number(c.amount || 0);
+          doc.text(idx + 1, 50, currentY + 3);
+          doc.text(formatDateDMY(c.date), 150, currentY + 3);
+          doc.text(`₹${c.amount}`, 350, currentY + 3);
+          currentY += 15;
+
+          // Check for page overflow
+          if (currentY > 700) {
+            doc.addPage();
+            currentY = 50;
+          }
         });
 
+        // Total Collected row
+        doc.moveDown(1);
+        doc.font("Helvetica-Bold").text(`Total Collected: ₹${totalColl}`, 300);
+
+        doc.moveDown(3);
+        doc.moveTo(40, doc.y).lineTo(550, doc.y).strokeColor("#cccccc").stroke();
         doc.moveDown(2);
-        doc.moveTo(30, doc.y).lineTo(560, doc.y).stroke();
-        doc.moveDown(2);
+
+        // Final page overflow check for next customer
+        if (doc.y > 650) {
+          doc.addPage();
+        }
       }
 
       doc.end();
