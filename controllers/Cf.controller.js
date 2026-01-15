@@ -4,10 +4,10 @@ const saveCf = async (req, res) => {
   try {
     const { sNo, date, amount } = req.body;
 
-    if (sNo === undefined || !date || amount === undefined) {
+    if (sNo === undefined || !date || date === "Invalid date" || amount === undefined) {
       return res.status(400).json({
         success: false,
-        message: 'sNo, date and amount are required',
+        message: 'A valid date, sNo and amount are required',
       });
     }
 
@@ -49,7 +49,9 @@ const clearCf = async (req, res) => {
 // optional helper to get all CF entries (useful for testing)
 const getAllCf = async (req, res) => {
   try {
-    const rows = await CfModel.findAll();
+    const rows = await CfModel.findAll({
+      order: [['sNo', 'ASC']]
+    });
     return res.status(200).json({ success: true, count: rows.length, data: rows });
   } catch (err) {
     console.error('Get All CF Error:', err);

@@ -107,12 +107,12 @@ const LoanUser = sequelize.define(
     },
 
     givenDate: {
-      type: DataTypes.DATEONLY,
+      type: DataTypes.STRING(10), // Store as dd-mm-yyyy
       allowNull: false,
     },
 
     lastDate: {
-      type: DataTypes.DATEONLY,
+      type: DataTypes.STRING(10), // Store as dd-mm-yyyy
       allowNull: false,
     },
 
@@ -147,18 +147,25 @@ const calculateLoan = (loan) => {
   /* =========================================
      1️⃣ Calculate Day
   ========================================= */
-  if (loan.givenDate) {
-    const date = new Date(loan.givenDate);
-    const days = [
-      "Sunday",
-      "Monday",
-      "Tuesday",
-      "Wednesday",
-      "Thursday",
-      "Friday",
-      "Saturday",
-    ];
-    loan.day = days[date.getDay()];
+  if (loan.givenDate && loan.givenDate !== "Invalid date") {
+    // Parse dd-mm-yyyy to Date object for calculation
+    const parts = loan.givenDate.split("-");
+    if (parts.length === 3) {
+      // Create date format YYYY-MM-DD for standard constructor
+      const date = new Date(`${parts[2]}-${parts[1]}-${parts[0]}`);
+      const days = [
+        "Sunday",
+        "Monday",
+        "Tuesday",
+        "Wednesday",
+        "Thursday",
+        "Friday",
+        "Saturday",
+      ];
+      if (!isNaN(date.getTime())) {
+        loan.day = days[date.getDay()];
+      }
+    }
   }
 
   /* =========================================

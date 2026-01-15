@@ -10,7 +10,8 @@ const {
     getTablesByLoanId,
     updateTableEntry,
     getLoanSummary,
-    downloadReport
+    downloadReport,
+    renewLoan
 } = require('../controllers/Loan.controller');
 
 // POST /loan/create -> create a new loan
@@ -26,6 +27,9 @@ LoanRouter.get('/loan/all', getAllLoans);
 
 // PUT /loan/update/:id -> update loan by ID
 LoanRouter.put('/loan/update', updateLoanById);
+
+// PUT /loan/renew -> renew loan (reset paid, update dates, clear history)
+LoanRouter.put('/loan/renew', renewLoan);
 
 // DELETE /loan/delete -> delete loan by ID (Query Param)
 LoanRouter.delete('/loan/delete', deleteLoanById);

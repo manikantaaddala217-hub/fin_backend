@@ -22,7 +22,7 @@ const CfModel = sequelize.define(
     },
 
     date: {
-      type: DataTypes.DATEONLY,
+      type: DataTypes.STRING(10), // Store as dd-mm-yyyy
       allowNull: false,
     },
   },

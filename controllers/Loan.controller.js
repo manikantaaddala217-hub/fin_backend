@@ -9,7 +9,10 @@ const { Op } = require("sequelize");
 const getAllLoans = async (req, res) => {
   const { section } = req.query;
   try {
-    const loans = await LoanUser.findAll({ where: { section: section } });
+    const loans = await LoanUser.findAll({
+      where: { section: section },
+      order: [['sno', 'ASC']]
+    });
     res.status(200).json({
       success: true,
       data: loans,
@@ -66,6 +69,7 @@ const getTablesByLoanId = async (req, res) => {
     });
     const entries = await LoanTable.findAll({
       where: { loanId },
+      order: [['date', 'ASC']]
     });
     res.status(200).json({
       success: true,
@@ -123,39 +127,41 @@ const updateLoanById = async (req, res) => {
       });
     }
 
-    // 🔹 Find record with SAME loanId + sno + section
+    // 🔹 1️⃣ Find loan by UNIQUE loanId
     const exactMatch = await LoanUser.findOne({
       where: { loanId },
     });
 
-    // 🔹 Check if sno already exists for same loanId but DIFFERENT section
+    if (!exactMatch) {
+      return res.status(404).json({
+        success: false,
+        message: "Loan record not found",
+      });
+    }
+
+    // 🔹 2️⃣ Optional sno conflict check (safe)
     const snoConflict = await LoanUser.findOne({
       where: {
         sno,
-        section
+        section,
       },
     });
 
-    if (exactMatch.loanId !== snoConflict.loanId) {
+    if (snoConflict && snoConflict.loanId !== exactMatch.loanId) {
       return res.status(400).json({
         success: false,
         message: "S.No already allocated for another section",
       });
     }
 
-    if (!exactMatch) {
-      return res.status(404).json({
-        success: false,
-        message: "Loan record not found for given loanId, sno and section",
-      });
-    }
-
-    // Helper to safely convert numbers
+    // 🔹 Helper
     const safeNum = (val, fallback) => {
       if (val === undefined || val === null || val === "") return fallback;
       const num = Number(val);
       return isNaN(num) ? fallback : num;
     };
+
+    const finalSection = section || exactMatch.section;
 
     const givenAmount = safeNum(
       updateFields.givenAmount,
@@ -172,35 +178,31 @@ const updateLoanById = async (req, res) => {
       exactMatch.interest || 0
     );
 
-    // 🔥 Calculate interest only for Interest section
-    if (section === "Interest") {
+    // 🔥 Interest calculation
+    if (finalSection === "Interest") {
       interest = Math.round((givenAmount * interestPercent) / 100);
     }
 
     const tamount = givenAmount + interest;
 
-    const finalUpdateData = {
+    // 🔹 3️⃣ UPDATE USING INSTANCE (CORRECT WAY)
+    await exactMatch.update({
       ...updateFields,
+      sno,
+      section: finalSection,
       givenAmount,
       interest,
       interestPercent,
       tamount,
-    };
-
-    // 🔹 Update using loanId + sno + section
-    await LoanUser.update(finalUpdateData, {
-      where: { loanId, sno, section },
     });
 
-    const updatedLoan = await LoanUser.findOne({
-      where: { loanId, sno, section },
-    });
-
+    // 🔹 4️⃣ Return updated record
     res.status(200).json({
       success: true,
       message: "Loan updated successfully",
-      data: updatedLoan,
+      data: exactMatch,
     });
+
   } catch (error) {
     console.error("Update Loan Error:", error);
     res.status(500).json({
@@ -210,8 +212,6 @@ const updateLoanById = async (req, res) => {
     });
   }
 };
-
-
 
 // 🔹 Table CRUD Operations
 const saveTable = async (req, res) => {
@@ -348,6 +348,7 @@ const getLoanSummary = async (req, res) => {
         section: ["Daily", "Weekly", "Monthly"],
       },
       group: ["section"],
+      order: [['section', 'ASC']]
     });
 
     // 🔹 Overall total summary
@@ -373,7 +374,19 @@ const getLoanSummary = async (req, res) => {
   }
 };
 
+const formatDateDMY = (dateStr) => {
+  if (!dateStr) return "";
+  if (typeof dateStr === "string" && dateStr.includes("-")) return dateStr;
+  const d = new Date(dateStr);
+  if (isNaN(d)) return "";
+  return `${String(d.getDate()).padStart(2, "0")}-${String(
+    d.getMonth() + 1
+  ).padStart(2, "0")}-${d.getFullYear()}`;
+};
 
+/* ======================================================
+   CONTROLLER
+====================================================== */
 const downloadReport = async (req, res) => {
   try {
     const { dataType, section, areas, day, fromDate, toDate } = req.body;
@@ -381,6 +394,10 @@ const downloadReport = async (req, res) => {
     if (!dataType || !fromDate || !toDate) {
       return res.status(400).json({ message: "Missing required fields" });
     }
+
+    const headerText = `Report: ${dataType} | Section: ${section || "All"
+      } | Area: ${areas?.join(", ") || "All"} | Day: ${day || "All"
+      } | From: ${fromDate} | To: ${toDate}`;
 
     /* ======================================================
        1️⃣ CUSTOMER DATA → EXCEL
@@ -401,56 +418,44 @@ const downloadReport = async (req, res) => {
         { header: "Alt Phone", key: "alternativeNumber", width: 15 },
         { header: "Work", key: "work", width: 15 },
         { header: "H/O / W/O", key: "houseWifeOrSonOf", width: 18 },
-        { header: "Refer Name", key: "referName", width: 18 },
-        { header: "Refer Number", key: "referNumber", width: 18 },
         { header: "Given Amount", key: "givenAmount", width: 15 },
         { header: "Paid", key: "paid", width: 12 },
         { header: "Pending", key: "pending", width: 12 },
-        { header: "Interest %", key: "interestPercent", width: 12 },
         { header: "Interest", key: "interest", width: 12 },
-        { header: "Total Amount", key: "tamount", width: 15 },
+        { header: "Total", key: "tamount", width: 15 },
         { header: "Given Date", key: "givenDate", width: 15 },
         { header: "Last Date", key: "lastDate", width: 15 },
-        { header: "Additional Info", key: "additionalInfo", width: 25 },
-        { header: "Verified By", key: "verifiedBy", width: 15 },
-        { header: "Verified No", key: "verifiedByNo", width: 15 },
       ];
 
-      const where = {
-        givenDate: { [Op.between]: [fromDate, toDate] },
-      };
+      sheet.insertRow(1, [headerText]);
+      sheet.mergeCells(1, 1, 1, sheet.columns.length);
+      sheet.getRow(1).font = { bold: true };
+
+      sheet.addRow([]);
+      sheet.addRow(sheet.columns.map((c) => c.header));
+      sheet.getRow(3).font = { bold: true };
+
+      const where = {};
       if (section) where.section = section;
       if (areas?.length) where.area = { [Op.in]: areas };
       if (section === "Weekly" && day) where.day = day;
 
-      const users = await LoanUser.findAll({ where });
-
-      let totalGiven = 0,
-        totalPaid = 0,
-        totalAmount = 0;
+      const users = await LoanUser.findAll({
+        where,
+        order: [["sno", "ASC"]],
+      });
 
       users.forEach((u) => {
         const paid = Number(u.paid || 0);
         const total = Number(u.tamount || 0);
 
-        totalGiven += Number(u.givenAmount || 0);
-        totalPaid += paid;
-        totalAmount += total;
-
         sheet.addRow({
           ...u.toJSON(),
           pending: total - paid,
+          givenDate: formatDateDMY(u.givenDate),
+          lastDate: formatDateDMY(u.lastDate),
         });
       });
-
-      const totalRow = sheet.addRow({
-        name: "TOTAL",
-        givenAmount: totalGiven,
-        paid: totalPaid,
-        pending: totalAmount - totalPaid,
-        tamount: totalAmount,
-      });
-      totalRow.font = { bold: true };
 
       res.setHeader(
         "Content-Disposition",
@@ -461,7 +466,7 @@ const downloadReport = async (req, res) => {
     }
 
     /* ======================================================
-       2️⃣ COLLECTION DATA → EXCEL
+       2️⃣ COLLECTION → EXCEL
     ====================================================== */
     if (dataType === "Collection") {
       const workbook = new ExcelJS.Workbook();
@@ -474,38 +479,34 @@ const downloadReport = async (req, res) => {
         { header: "Amount", key: "amount", width: 15 },
       ];
 
+      sheet.insertRow(1, [headerText]);
+      sheet.mergeCells(1, 1, 1, 4);
+      sheet.getRow(1).font = { bold: true };
+
+      sheet.addRow([]);
+      sheet.addRow(sheet.columns.map((c) => c.header));
+      sheet.getRow(3).font = { bold: true };
+
       const collections = await LoanTable.findAll({
-        where: { date: { [Op.between]: [fromDate, toDate] } },
         order: [["date", "ASC"]],
       });
 
       const loanIds = [...new Set(collections.map((c) => c.loanId))];
-
       const users = await LoanUser.findAll({
         where: { loanId: { [Op.in]: loanIds } },
-        attributes: ["loanId", "name", "sno"],
       });
 
       const userMap = {};
       users.forEach((u) => (userMap[u.loanId] = u));
 
-      let totalAmount = 0;
-
       collections.forEach((c) => {
-        totalAmount += Number(c.amount || 0);
         sheet.addRow({
           sno: userMap[c.loanId]?.sno,
           name: userMap[c.loanId]?.name,
-          date: c.date,
+          date: formatDateDMY(c.date),
           amount: c.amount,
         });
       });
-
-      const totalRow = sheet.addRow({
-        name: "TOTAL",
-        amount: totalAmount,
-      });
-      totalRow.font = { bold: true };
 
       res.setHeader(
         "Content-Disposition",
@@ -516,11 +517,10 @@ const downloadReport = async (req, res) => {
     }
 
     /* ======================================================
-       3️⃣ FULL DATA → PDF (ALL CUSTOMER FIELDS + COLLECTION TABLE)
+       3️⃣ FULL DATA → PDF
     ====================================================== */
     if (dataType === "Full Data") {
-      const doc = new PDFDocument({ margin: 30, size: "A4" });
-
+      const doc = new PDFDocument({ margin: 30 });
       res.setHeader("Content-Type", "application/pdf");
       res.setHeader(
         "Content-Disposition",
@@ -529,120 +529,39 @@ const downloadReport = async (req, res) => {
 
       doc.pipe(res);
 
-      doc.fontSize(16).font("Helvetica-Bold")
-        .text("Full Customer Loan Report", { align: "center" });
-      doc.moveDown(1);
-
-      const users = await LoanUser.findAll({
-        where: {
-          givenDate: { [Op.between]: [fromDate, toDate] },
-          ...(section && { section }),
-          ...(areas?.length && { area: { [Op.in]: areas } }),
-          ...(section === "Weekly" && day && { day }),
-        },
-        order: [["givenDate", "ASC"]],
+      doc.fontSize(14).font("Helvetica-Bold").text(headerText, {
+        align: "center",
       });
+      doc.moveDown(2);
+
+      const users = await LoanUser.findAll({ order: [["sno", "ASC"]] });
 
       for (const u of users) {
-        const paid = Number(u.paid || 0);
-        const total = Number(u.tamount || 0);
-        const pending = total - paid;
-
-        /* -------- CUSTOMER DETAILS -------- */
-        doc.fontSize(12).font("Helvetica-Bold")
-          .text(`Customer : ${u.name} (S.No: ${u.sno})`);
-        doc.moveDown(0.3);
-
+        doc.fontSize(11).font("Helvetica-Bold").text(
+          `${u.name} (S.No: ${u.sno})`
+        );
         doc.fontSize(9).font("Helvetica");
 
-        const fields = [
-          ["Loan ID", u.loanId], ["Section", u.section],
-          ["Area", u.area], ["Day", u.day],
-          ["Address", u.address], ["Phone", u.phoneNumber],
-          ["Alt Phone", u.alternativeNumber], ["Work", u.work],
-          ["H/O / W/O", u.houseWifeOrSonOf],
-          ["Refer Name", u.referName],
-          ["Refer Number", u.referNumber],
-          ["Given Amount", u.givenAmount],
-          ["Paid", paid], ["Pending", pending],
-          ["Interest %", u.interestPercent],
-          ["Interest", u.interest],
-          ["Total Amount", total],
-          ["Given Date", u.givenDate],
-          ["Last Date", u.lastDate],
-          ["Additional Info", u.additionalInfo],
-          ["Verified By", u.verifiedBy],
-          ["Verified No", u.verifiedByNo],
-        ];
-
-        fields.forEach((f, i) => {
-          const x = i % 2 === 0 ? 40 : 300;
-          doc.text(`${f[0]} : ${f[1] || "-"}`, x);
-          if (i % 2 !== 0) doc.moveDown(0.2);
-        });
-
-        doc.moveDown(0.5);
-
-        /* -------- COLLECTION TABLE -------- */
-        doc.font("Helvetica-Bold").fontSize(10).text("Collections");
-
-        const tableTop = doc.y + 5;
-        const colX = [40, 120, 260];
-        const rowHeight = 18;
-
-        // Header
-        doc
-          .rect(colX[0], tableTop, 60, rowHeight).stroke()
-          .rect(colX[1], tableTop, 140, rowHeight).stroke()
-          .rect(colX[2], tableTop, 100, rowHeight).stroke();
-
-        doc.text("S.No", colX[0] + 5, tableTop + 5);
-        doc.text("Date", colX[1] + 5, tableTop + 5);
-        doc.text("Amount", colX[2] + 5, tableTop + 5);
-
-        let y = tableTop + rowHeight;
-        let sno = 1;
-        let totalCollected = 0;
+        doc.text(`Loan ID: ${u.loanId}`);
+        doc.text(`Section: ${u.section} | Area: ${u.area}`);
+        doc.text(`Given Date: ${formatDateDMY(u.givenDate)} | Last Date: ${formatDateDMY(u.lastDate)}`);
+        doc.text(`Given: ${u.givenAmount} | Paid: ${u.paid} | Total: ${u.tamount}`);
+        doc.moveDown(1);
 
         const collections = await LoanTable.findAll({
           where: { loanId: u.loanId },
           order: [["date", "ASC"]],
         });
 
-        if (!collections.length) {
-          doc.text("No collection records", colX[0] + 5, y + 5);
-          y += rowHeight;
-        } else {
-          collections.forEach(c => {
-            totalCollected += Number(c.amount || 0);
+        collections.forEach((c, i) => {
+          doc.text(
+            `${i + 1}. ${formatDateDMY(c.date)} - ₹${c.amount}`
+          );
+        });
 
-            doc
-              .rect(colX[0], y, 60, rowHeight).stroke()
-              .rect(colX[1], y, 140, rowHeight).stroke()
-              .rect(colX[2], y, 100, rowHeight).stroke();
-
-            doc.text(sno++, colX[0] + 5, y + 5);
-            doc.text(c.date, colX[1] + 5, y + 5);
-            doc.text(`₹${c.amount}`, colX[2] + 5, y + 5);
-
-            y += rowHeight;
-
-            // Page break safety
-            if (y > 750) {
-              doc.addPage();
-              y = 50;
-            }
-          });
-        }
-
-        // Total Row
-        doc.font("Helvetica-Bold");
-        doc.text(`Total Collected : ₹${totalCollected}`, colX[2], y + 10);
-
-        // Divider between customers
         doc.moveDown(2);
         doc.moveTo(30, doc.y).lineTo(560, doc.y).stroke();
-        doc.moveDown(1);
+        doc.moveDown(2);
       }
 
       doc.end();
@@ -654,7 +573,81 @@ const downloadReport = async (req, res) => {
     console.error(error);
     res.status(500).json({ message: "Report generation failed" });
   }
+}
+
+const renewLoan = async (req, res) => {
+  try {
+    const { loanId, givenAmount, section, interestPercent, interest, givenDate, lastDate, ...otherData } = req.body;
+
+    if (!loanId) {
+      return res.status(400).json({
+        success: false,
+        message: "loanId is required",
+      });
+    }
+
+    // 1️⃣ Find the loan
+    const loan = await LoanUser.findOne({ where: { loanId } });
+    if (!loan) {
+      return res.status(404).json({
+        success: false,
+        message: "Loan not found",
+      });
+    }
+
+    // 2️⃣ Prepare updated values
+    const finalGivenAmount = givenAmount !== undefined ? Number(givenAmount) : Number(loan.givenAmount);
+    const finalSection = section || loan.section;
+
+    let finalInterest = 0;
+    let finalInterestPercent = interestPercent !== undefined ? Number(interestPercent) : Number(loan.interestPercent);
+
+    if (finalSection === "Interest") {
+      // If interest section, calculate from percent
+      finalInterest = Math.round((finalGivenAmount * finalInterestPercent) / 100);
+    } else {
+      // Otherwise use interest amount from body or existing
+      finalInterest = interest !== undefined ? Number(interest) : Number(loan.interest);
+    }
+
+    const finalTamount = finalGivenAmount + finalInterest;
+
+    // 3️⃣ Update LoanUser record
+    await loan.update({
+      ...otherData,
+      givenAmount: finalGivenAmount,
+      section: finalSection,
+      interestPercent: finalInterestPercent,
+      interest: finalInterest,
+      tamount: finalTamount,
+      givenDate: givenDate || loan.givenDate,
+      lastDate: lastDate || loan.lastDate,
+      paid: 0, // Always reset paid to 0
+    });
+
+    // 4️⃣ Delete all entries in LoanTable for this loan
+    await LoanTable.destroy({
+      where: { loanId },
+    });
+
+    // 5️⃣ Refresh loan data to return all model fields
+    await loan.reload();
+
+    res.status(200).json({
+      success: true,
+      message: "Loan renewed successfully.",
+      data: loan,
+    });
+  } catch (error) {
+    console.error("Renew Loan Error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to renew loan",
+      error: error.message,
+    });
+  }
 };
+
 
 module.exports = {
   getAllLoans,
@@ -666,4 +659,5 @@ module.exports = {
   updateTableEntry,
   getLoanSummary,
   downloadReport,
+  renewLoan,
 };

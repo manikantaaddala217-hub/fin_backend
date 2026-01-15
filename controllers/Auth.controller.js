@@ -4,7 +4,7 @@ const jwt = require("jsonwebtoken");
 require("dotenv").config();
 const { Op } = require("sequelize");
 const transporter = require("../utils/nodemailerTransporter");
-const otpStore = {}; 
+const otpStore = {};
 
 const loginUser = async (req, res) => {
   try {
@@ -86,7 +86,8 @@ const getAllUsersExceptAdmin = async (req, res) => {
           [Op.notILike]: 'admin' // Case-insensitive exclusion
         }
       },
-      attributes: { exclude: ["password"] }
+      attributes: { exclude: ["password"] },
+      order: [['username', 'ASC']]
     });
     res.status(200).json(users);
   } catch (error) {

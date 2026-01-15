@@ -2,16 +2,16 @@ const BkpModel = require('../models/Bkp.model');
 
 const saveBkp = async (req, res) => {
   try {
-    const { sNo, name, amount, area } = req.body;
+    const { sNo, name, amount, area, date } = req.body;
 
-    if (sNo === undefined || !name || amount === undefined || !area) {
+    if (sNo === undefined || !name || amount === undefined || !area || !date || date === "Invalid date") {
       return res.status(400).json({
         success: false,
-        message: 'sNo, name, amount and area are required',
+        message: 'sNo, name, amount, area and a valid date are required',
       });
     }
 
-    const entry = await BkpModel.create({ sNo, name, amount, area });
+    const entry = await BkpModel.create({ sNo, name, amount, area, date });
 
     return res.status(201).json({
       success: true,
@@ -53,7 +53,9 @@ const deleteBkp = async (req, res) => {
 
 const getAllBkp = async (req, res) => {
   try {
-    const rows = await BkpModel.findAll();
+    const rows = await BkpModel.findAll({
+      order: [['sNo', 'ASC']]
+    });
     return res.status(200).json({ success: true, count: rows.length, data: rows });
   } catch (err) {
     console.error('Get All BKP Error:', err);
