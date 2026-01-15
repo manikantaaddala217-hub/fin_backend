@@ -1,5 +1,6 @@
 const express = require('express');
 const LoanRouter = express.Router();
+const authMiddleware = require('../middlewares/auth.middleware');
 
 const {
     getAllLoans,
@@ -13,6 +14,9 @@ const {
     downloadReport,
     renewLoan
 } = require('../controllers/Loan.controller');
+
+// Apply authMiddleware to all routes in this router
+LoanRouter.use(authMiddleware);
 
 // POST /loan/create -> create a new loan
 LoanRouter.post('/loan/create', createLoan);

@@ -22,7 +22,7 @@ const LoanUser = sequelize.define(
     },
 
     area: {
-      type: DataTypes.STRING(10),
+      type: DataTypes.STRING(50),
       allowNull: false,
     },
 
@@ -107,12 +107,12 @@ const LoanUser = sequelize.define(
     },
 
     givenDate: {
-      type: DataTypes.STRING(10), // Store as dd-mm-yyyy
+      type: DataTypes.STRING(50),
       allowNull: false,
     },
 
     lastDate: {
-      type: DataTypes.STRING(10), // Store as dd-mm-yyyy
+      type: DataTypes.STRING(50),
       allowNull: false,
     },
 
@@ -123,13 +123,13 @@ const LoanUser = sequelize.define(
     },
 
     verifiedBy: {
-      type: DataTypes.STRING(25),
+      type: DataTypes.STRING(50), // Increased for safety
       allowNull: true,
       defaultValue: null,
     },
 
     verifiedByNo: {
-      type: DataTypes.STRING(15),
+      type: DataTypes.STRING(25), // Increased for safety
       allowNull: true,
       defaultValue: null,
     },
@@ -148,23 +148,32 @@ const calculateLoan = (loan) => {
      1️⃣ Calculate Day
   ========================================= */
   if (loan.givenDate && loan.givenDate !== "Invalid date") {
-    // Parse dd-mm-yyyy to Date object for calculation
-    const parts = loan.givenDate.split("-");
-    if (parts.length === 3) {
-      // Create date format YYYY-MM-DD for standard constructor
-      const date = new Date(`${parts[2]}-${parts[1]}-${parts[0]}`);
-      const days = [
-        "Sunday",
-        "Monday",
-        "Tuesday",
-        "Wednesday",
-        "Thursday",
-        "Friday",
-        "Saturday",
-      ];
-      if (!isNaN(date.getTime())) {
-        loan.day = days[date.getDay()];
+    let dateObj;
+
+    // Try parsing dd-mm-yyyy
+    if (typeof loan.givenDate === 'string' && loan.givenDate.includes("-") && !loan.givenDate.includes("T")) {
+      const parts = loan.givenDate.split("-");
+      if (parts.length === 3) {
+        // Create date format YYYY-MM-DD
+        dateObj = new Date(`${parts[2]}-${parts[1]}-${parts[0]}`);
       }
+    } else {
+      // Try parsing standard ISO format
+      dateObj = new Date(loan.givenDate);
+    }
+
+    const days = [
+      "Sunday",
+      "Monday",
+      "Tuesday",
+      "Wednesday",
+      "Thursday",
+      "Friday",
+      "Saturday",
+    ];
+
+    if (dateObj && !isNaN(dateObj.getTime())) {
+      loan.day = days[dateObj.getDay()];
     }
   }
 
@@ -179,11 +188,9 @@ const calculateLoan = (loan) => {
      3️⃣ Interest Logic
   ========================================= */
   if (loan.section === "Interest") {
-    // 🔥 Backend calculates interest
     interestAmount = Math.round((principal * percent) / 100);
     loan.interest = interestAmount;
   } else {
-    // ✅ Interest comes from frontend
     loan.interest = Number(loan.interest) || 0;
   }
 

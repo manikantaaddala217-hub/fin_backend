@@ -10,6 +10,7 @@ const CfRouter = require('./routes/Cf.router')
 const BkpRouter = require('./routes/Bkp.router')
 const app = express()
 const trimMiddleware = require('./middlewares/trim.middleware')
+const errorMiddleware = require('./middlewares/error.middleware')
 
 app.use(express.json())
 app.use(trimMiddleware)
@@ -23,6 +24,9 @@ app.use('/', userRouter)
 app.use('/', LoanRouter)
 app.use('/', CfRouter)
 app.use('/', BkpRouter)
+
+// Error handling middleware (should be last)
+app.use(errorMiddleware)
 
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {

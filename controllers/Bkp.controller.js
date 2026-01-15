@@ -1,17 +1,17 @@
 const BkpModel = require('../models/Bkp.model');
 
-const saveBkp = async (req, res) => {
+const saveBkp = async (req, res, next) => {
   try {
-    const { sNo, name, amount, area, date } = req.body;
+    const { sNo, name, amount, area } = req.body;
 
-    if (sNo === undefined || !name || amount === undefined || !area || !date || date === "Invalid date") {
+    if (sNo === undefined || !name || amount === undefined || !area) {
       return res.status(400).json({
         success: false,
-        message: 'sNo, name, amount, area and a valid date are required',
+        message: 'sNo, name, amount, area are required',
       });
     }
 
-    const entry = await BkpModel.create({ sNo, name, amount, area, date });
+    const entry = await BkpModel.create({ sNo, name, amount, area });
 
     return res.status(201).json({
       success: true,
@@ -19,16 +19,11 @@ const saveBkp = async (req, res) => {
       data: entry,
     });
   } catch (err) {
-    console.error('Save BKP Error:', err);
-    return res.status(500).json({
-      success: false,
-      message: 'Failed to save BKP entry',
-      error: err.message,
-    });
+    next(err);
   }
 };
 
-const deleteBkp = async (req, res) => {
+const deleteBkp = async (req, res, next) => {
   try {
     const { id } = req.query;
 
@@ -46,20 +41,18 @@ const deleteBkp = async (req, res) => {
 
     return res.status(200).json({ success: true, message: 'BKP entry deleted' });
   } catch (err) {
-    console.error('Delete BKP Error:', err);
-    return res.status(500).json({ success: false, message: 'Failed to delete BKP entry', error: err.message });
+    next(err);
   }
 };
 
-const getAllBkp = async (req, res) => {
+const getAllBkp = async (req, res, next) => {
   try {
     const rows = await BkpModel.findAll({
       order: [['sNo', 'ASC']]
     });
     return res.status(200).json({ success: true, count: rows.length, data: rows });
   } catch (err) {
-    console.error('Get All BKP Error:', err);
-    return res.status(500).json({ success: false, message: 'Failed to fetch BKP entries', error: err.message });
+    next(err);
   }
 };
 

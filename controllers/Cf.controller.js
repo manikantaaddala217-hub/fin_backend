@@ -1,6 +1,6 @@
 const CfModel = require('../models/Cf.model');
 
-const saveCf = async (req, res) => {
+const saveCf = async (req, res, next) => {
   try {
     const { sNo, date, amount } = req.body;
 
@@ -19,16 +19,11 @@ const saveCf = async (req, res) => {
       data: entry,
     });
   } catch (err) {
-    console.error('Save CF Error:', err);
-    return res.status(500).json({
-      success: false,
-      message: 'Failed to save CF entry',
-      error: err.message,
-    });
+    next(err);
   }
 };
 
-const clearCf = async (req, res) => {
+const clearCf = async (req, res, next) => {
   try {
     await CfModel.destroy({ where: {}, truncate: true });
 
@@ -37,25 +32,19 @@ const clearCf = async (req, res) => {
       message: 'All CF entries cleared',
     });
   } catch (err) {
-    console.error('Clear CF Error:', err);
-    return res.status(500).json({
-      success: false,
-      message: 'Failed to clear CF entries',
-      error: err.message,
-    });
+    next(err);
   }
 };
 
 // optional helper to get all CF entries (useful for testing)
-const getAllCf = async (req, res) => {
+const getAllCf = async (req, res, next) => {
   try {
     const rows = await CfModel.findAll({
       order: [['sNo', 'ASC']]
     });
     return res.status(200).json({ success: true, count: rows.length, data: rows });
   } catch (err) {
-    console.error('Get All CF Error:', err);
-    return res.status(500).json({ success: false, message: 'Failed to fetch CF entries', error: err.message });
+    next(err);
   }
 };
 

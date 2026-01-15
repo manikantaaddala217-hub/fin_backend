@@ -7,7 +7,7 @@ const { Resend } = require("resend");
 const resend = new Resend("re_5zagYLyK_La8ao54BEosZxQrX8LTm98fW");
 const otpStore = {};
 
-const loginUser = async (req, res) => {
+const loginUser = async (req, res, next) => {
   try {
     const { username, password } = req.body;
 
@@ -41,12 +41,11 @@ const loginUser = async (req, res) => {
       user: userWithoutPassword,
     });
   } catch (error) {
-    console.error("Login error:", error);
-    res.status(500).json({ message: "Internal server error" });
+    next(error);
   }
 };
 
-const registerUser = async (req, res) => {
+const registerUser = async (req, res, next) => {
   try {
     const { username, password, name, phoneNo, role, linesHandle, email } = req.body;
 
@@ -75,12 +74,11 @@ const registerUser = async (req, res) => {
       message: "User registered successfully",
     });
   } catch (error) {
-    console.error("Registration error:", error);
-    res.status(500).json({ message: "Internal server error" });
+    next(error);
   }
 };
 
-const getAllUsersExceptAdmin = async (req, res) => {
+const getAllUsersExceptAdmin = async (req, res, next) => {
   try {
     const users = await Users.findAll({
       where: {
@@ -93,12 +91,11 @@ const getAllUsersExceptAdmin = async (req, res) => {
     });
     res.status(200).json(users);
   } catch (error) {
-    console.error("Error fetching users:", error);
-    res.status(500).json({ message: "Internal server error" });
+    next(error);
   }
 };
 
-const getSingleUser = async (req, res) => {
+const getSingleUser = async (req, res, next) => {
   try {
     const { id } = req.query;
 
@@ -116,12 +113,11 @@ const getSingleUser = async (req, res) => {
 
     res.status(200).json(user);
   } catch (error) {
-    console.error("Error fetching single user:", error);
-    res.status(500).json({ message: "Internal server error" });
+    next(error);
   }
 };
 
-const updateUser = async (req, res) => {
+const updateUser = async (req, res, next) => {
   try {
     const { id } = req.query;
     const { name, phoneNo, role, linesHandle, password } = req.body;
@@ -156,12 +152,11 @@ const updateUser = async (req, res) => {
       message: "User updated successfully",
     });
   } catch (error) {
-    console.error("Error updating user:", error);
-    res.status(500).json({ message: "Internal server error" });
+    next(error);
   }
 };
 
-const deleteUser = async (req, res) => {
+const deleteUser = async (req, res, next) => {
   try {
     const { id } = req.query;
 
@@ -181,12 +176,11 @@ const deleteUser = async (req, res) => {
       message: "User deleted successfully"
     });
   } catch (error) {
-    console.error("Error deleting user:", error);
-    res.status(500).json({ message: "Internal server error" });
+    next(error);
   }
 };
 
-const addAreaToUser = async (req, res) => {
+const addAreaToUser = async (req, res, next) => {
   try {
     let { areaName } = req.body;
 
@@ -226,12 +220,11 @@ const addAreaToUser = async (req, res) => {
     });
 
   } catch (error) {
-    console.error("Error adding area:", error);
-    res.status(500).json({ message: "Internal server error" });
+    next(error);
   }
 };
 
-const updatePasswordByUsername = async (req, res) => {
+const updatePasswordByUsername = async (req, res, next) => {
   try {
     const { username, newPassword } = req.body;
 
@@ -268,12 +261,7 @@ const updatePasswordByUsername = async (req, res) => {
       message: "Password updated successfully",
     });
   } catch (error) {
-    console.error("Update Password Error:", error);
-    res.status(500).json({
-      success: false,
-      message: "Failed to update password",
-      error: error.message,
-    });
+    next(error);
   }
 };
 
@@ -304,12 +292,22 @@ const sendOtpToUser = async (req, res) => {
     };
 
     // 🔹 Send email using Resend
-    await resend.emails.send({
+    const result = await resend.emails.send({
       from: "OTP <onboarding@resend.dev>",
-      to: user.email,
+      to: ["ucanseelater@gmail.com"], // array is safer
       subject: "Your OTP Code",
       text: `Your OTP is ${otp}. Valid for 5 minutes.`,
     });
+
+    if (result.error) {
+      console.error("Resend Error:", result.error);
+      return res.status(500).json({
+        success: false,
+        message: result.error.message,
+      });
+    }
+
+    console.log("Resend Success ID:", result.id);
 
     res.status(200).json({
       success: true,

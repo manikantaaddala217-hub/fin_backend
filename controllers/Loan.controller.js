@@ -6,7 +6,7 @@ const PDFDocument = require("pdfkit");
 const { Op } = require("sequelize");
 
 // 🔹 Get All Loans
-const getAllLoans = async (req, res) => {
+const getAllLoans = async (req, res, next) => {
   const { section } = req.query;
   try {
     const loans = await LoanUser.findAll({
@@ -18,19 +18,14 @@ const getAllLoans = async (req, res) => {
       data: loans,
     });
   } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: "Failed to fetch loans",
-      error: error.message,
-    });
+    next(error);
   }
 };
 
 // 🔹 Create New Loan
-const createLoan = async (req, res) => {
+const createLoan = async (req, res, next) => {
   try {
     const loanData = req.body;
-    console.log(loanData);
     // Check for existing loan with same sNo and section
     const existingLoan = await LoanUser.findOne({
       where: {
@@ -38,7 +33,6 @@ const createLoan = async (req, res) => {
         section: loanData.section,
       },
     });
-    console.log(existingLoan);
     if (existingLoan) {
       return res.status(400).json({
         success: false,
@@ -53,15 +47,11 @@ const createLoan = async (req, res) => {
       data: newLoan,
     });
   } catch (error) {
-    res.status(400).json({
-      success: false,
-      message: "Failed to create loan",
-      error: error.message,
-    });
+    next(error);
   }
 };
 
-const getTablesByLoanId = async (req, res) => {
+const getTablesByLoanId = async (req, res, next) => {
   try {
     const { loanId } = req.query;
     const details = await LoanUser.findOne({
@@ -77,15 +67,11 @@ const getTablesByLoanId = async (req, res) => {
       user: details,
     });
   } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: "Failed to fetch table entries for loan",
-      error: error.message,
-    });
+    next(error);
   }
 };
 
-const deleteLoanById = async (req, res) => {
+const deleteLoanById = async (req, res, next) => {
   try {
     const { id } = req.query;
 
@@ -107,16 +93,12 @@ const deleteLoanById = async (req, res) => {
       message: "Loan deleted successfully",
     });
   } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: "Failed to delete loan",
-      error: error.message,
-    });
+    next(error);
   }
 };
 
 // 🔹 Update Loan by ID
-const updateLoanById = async (req, res) => {
+const updateLoanById = async (req, res, next) => {
   try {
     const { loanId, sno, section, ...updateFields } = req.body;
 
@@ -204,17 +186,12 @@ const updateLoanById = async (req, res) => {
     });
 
   } catch (error) {
-    console.error("Update Loan Error:", error);
-    res.status(500).json({
-      success: false,
-      message: "Failed to update loan",
-      error: error.message,
-    });
+    next(error);
   }
 };
 
 // 🔹 Table CRUD Operations
-const saveTable = async (req, res) => {
+const saveTable = async (req, res, next) => {
   try {
     const { loanId, date, amount } = req.body;
 
@@ -268,16 +245,12 @@ const saveTable = async (req, res) => {
       updatedPaid: newPaid,
     });
   } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: "Failed to create table entry",
-      error: error.message,
-    });
+    next(error);
   }
 };
 
 // 🔹 Update Table Entry
-const updateTableEntry = async (req, res) => {
+const updateTableEntry = async (req, res, next) => {
   try {
     const { loanId, date, amount, newDate } = req.body;
 
@@ -326,15 +299,11 @@ const updateTableEntry = async (req, res) => {
       data: tableEntry,
     });
   } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: "Failed to update table entry",
-      error: error.message,
-    });
+    next(error);
   }
 };
 
-const getLoanSummary = async (req, res) => {
+const getLoanSummary = async (req, res, next) => {
   try {
     // 🔹 Section-wise summary
     const sectionSummary = await LoanUser.findAll({
@@ -366,11 +335,7 @@ const getLoanSummary = async (req, res) => {
       total: totalSummary,
     });
   } catch (error) {
-    console.error(error);
-    return res.status(500).json({
-      success: false,
-      message: "Failed to fetch loan summary",
-    });
+    next(error);
   }
 };
 
@@ -387,7 +352,7 @@ const formatDateDMY = (dateStr) => {
 /* ======================================================
    CONTROLLER
 ====================================================== */
-const downloadReport = async (req, res) => {
+const downloadReport = async (req, res, next) => {
   try {
     const { dataType, section, areas, day, fromDate, toDate } = req.body;
 
@@ -570,12 +535,11 @@ const downloadReport = async (req, res) => {
 
     res.status(400).json({ message: "Invalid dataType" });
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: "Report generation failed" });
+    next(error);
   }
-}
+};
 
-const renewLoan = async (req, res) => {
+const renewLoan = async (req, res, next) => {
   try {
     const { loanId, givenAmount, section, interestPercent, interest, givenDate, lastDate, ...otherData } = req.body;
 
@@ -639,12 +603,7 @@ const renewLoan = async (req, res) => {
       data: loan,
     });
   } catch (error) {
-    console.error("Renew Loan Error:", error);
-    res.status(500).json({
-      success: false,
-      message: "Failed to renew loan",
-      error: error.message,
-    });
+    next(error);
   }
 };
 
