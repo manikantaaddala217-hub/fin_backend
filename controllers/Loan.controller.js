@@ -395,7 +395,7 @@ const downloadReport = async (req, res, next) => {
         { header: "Given Date", key: "givenDate", width: 15 },
         { header: "Last Date", key: "lastDate", width: 15 },
       ];
-      sheet.columns = columns;
+
 
       sheet.insertRow(1, [headerText]);
       sheet.mergeCells(1, 1, 1, columns.length);
@@ -464,7 +464,7 @@ const downloadReport = async (req, res, next) => {
       const workbook = new ExcelJS.Workbook();
       const sheet = workbook.addWorksheet("Collections");
 
-      sheet.columns = [
+      columns = [
         { header: "S.No", key: "sno", width: 8 },
         { header: "Name", key: "name", width: 20 },
         { header: "Date", key: "date", width: 15 },
