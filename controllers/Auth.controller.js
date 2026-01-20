@@ -6,6 +6,7 @@ require("dotenv").config();
 const { Resend } = require("resend");
 const resend = new Resend("re_5zagYLyK_La8ao54BEosZxQrX8LTm98fW");
 const otpStore = {};
+const transporter = require("../utils/nodemailerTransporter");
 
 const loginUser = async (req, res, next) => {
   try {
@@ -278,7 +279,7 @@ const sendOtpToUser = async (req, res) => {
     if (!user) {
       return res.status(404).json({
         success: false,
-        message: "enter the correct username",
+        message: "Enter the correct username",
       });
     }
 
@@ -291,23 +292,18 @@ const sendOtpToUser = async (req, res) => {
       expiresAt: Date.now() + 5 * 60 * 1000, // 5 minutes
     };
 
-    // 🔹 Send email using Resend
-    const result = await resend.emails.send({
-      from: "OTP <onboarding@resend.dev>",
-      to: ["manikantaaddala217@gmail.com"], // array is safer
+    // 🔹 Send email using Nodemailer
+    const mailOptions = {
+      from: `"OTP Service" <${process.env.EMAIL_USER}>`,
+      to:["ucanseelater@gmail.com"], // send to user's registered email
       subject: "Your OTP Code",
       text: `Your OTP is ${otp}. Valid for 5 minutes.`,
-    });
+      html: `<p>Your OTP is <b>${otp}</b>. Valid for 5 minutes.</p>`,
+    };
 
-    if (result.error) {
-      console.error("Resend Error:", result.error);
-      return res.status(500).json({
-        success: false,
-        message: result.error.message,
-      });
-    }
+    const info = await transporter.sendMail(mailOptions);
 
-    console.log("Resend Success ID:", result.id);
+    console.log("OTP sent:", info.messageId);
 
     res.status(200).json({
       success: true,
