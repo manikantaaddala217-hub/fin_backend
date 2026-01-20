@@ -266,6 +266,57 @@ const updatePasswordByUsername = async (req, res, next) => {
   }
 };
 
+// const sendOtpToUser = async (req, res) => {
+//   try {
+//     const { username } = req.query;
+
+//     if (!username) {
+//       return res.status(400).json({ success: false, message: "Username required" });
+//     }
+
+//     // 🔹 Verify if user exists
+//     const user = await Users.findOne({ where: { username } });
+//     if (!user) {
+//       return res.status(404).json({
+//         success: false,
+//         message: "Enter the correct username",
+//       });
+//     }
+
+//     // 🔹 Generate 6-digit OTP
+//     const otp = Math.floor(100000 + Math.random() * 900000);
+
+//     // 🔹 Store OTP with expiry (5 minutes)
+//     otpStore[username] = {
+//       otp,
+//       expiresAt: Date.now() + 5 * 60 * 1000, // 5 minutes
+//     };
+
+//     // 🔹 Send email using Nodemailer
+//     const mailOptions = {
+//       from: `"OTP Service" <${process.env.EMAIL_USER}>`,
+//       to:["ucanseelater@gmail.com"], // send to user's registered email
+//       subject: "Your OTP Code",
+//       text: `Your OTP is ${otp}. Valid for 5 minutes.`,
+//       html: `<p>Your OTP is <b>${otp}</b>. Valid for 5 minutes.</p>`,
+//     };
+
+//     const info = await transporter.sendMail(mailOptions);
+
+//     console.log("OTP sent:", info.messageId);
+
+//     res.status(200).json({
+//       success: true,
+//       message: "OTP sent successfully",
+//     });
+//   } catch (error) {
+//     console.error("Send OTP Error:", error);
+//     res.status(500).json({
+//       success: false,
+//       message: "Failed to send OTP",
+//     });
+//   }
+// };
 const sendOtpToUser = async (req, res) => {
   try {
     const { username } = req.query;
@@ -294,7 +345,7 @@ const sendOtpToUser = async (req, res) => {
 
     // 🔹 Send email using Nodemailer
     const mailOptions = {
-      from: `"OTP Service" <${process.env.EMAIL_USER}>`,
+      from: `"OTP Service" <manikantaaddala217@gmail.com>`,
       to:["ucanseelater@gmail.com"], // send to user's registered email
       subject: "Your OTP Code",
       text: `Your OTP is ${otp}. Valid for 5 minutes.`,
@@ -317,7 +368,6 @@ const sendOtpToUser = async (req, res) => {
     });
   }
 };
-
 const validateOtp = (req, res) => {
   try {
     const { username, otp } = req.body;
